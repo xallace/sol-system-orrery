@@ -1,0 +1,7 @@
+node_modules/
+.npm-cache/
+.chrome-profile*/
+chrome-profile*/
+*.log
+tests/artifacts/
+rea-work/

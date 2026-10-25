@@ -1,0 +1,41 @@
+{
+  "source": "NASA/JPL Horizons API",
+  "source_url": "https://ssd.jpl.nasa.gov/api/horizons.api",
+  "retrieved_utc": "2026-10-25T20:36:36Z",
+  "configuration": {
+    "center": "Sun body centre (500@10)",
+    "ephemeris_type": "VECTORS",
+    "reference_frame": "Ecliptic of J2000.0",
+    "output_type": "GEOMETRIC cartesian states",
+    "units": "AU",
+    "time_type": "UT",
+    "targets": {
+      "earth": 399,
+      "mars": 499,
+      "neptune": 899
+    },
+    "source_ephemerides": {
+      "earth": "DE441",
+      "mars": "mar099",
+      "neptune": "nep098_merged"
+    }
+  },
+  "epochs": [
+    {
+      "utc": "2025-01-01T00:00:00Z",
+      "vectors": {
+        "earth": [-1.786972174739682E-1, 9.669802380913686E-1, -5.109423481926854E-5],
+        "mars": [-5.216960454284539E-1, 1.525231903226216E0, 4.475579163851812E-2],
+        "neptune": [2.987992919942701E1, -6.341865837328721E-1, -6.754998655811942E-1]
+      }
+    },
+    {
+      "utc": "2035-07-04T12:00:00Z",
+      "vectors": {
+        "earth": [2.094383528575715E-1, -9.949304707254641E-1, 8.284080625382881E-5],
+        "mars": [8.215785415992261E-1, -1.129792511370530E0, -4.381312780994513E-2],
+        "neptune": [2.763918910357175E1, 1.120251501451226E1, -8.675752832549204E-1]
+      }
+    }
+  ]
+}

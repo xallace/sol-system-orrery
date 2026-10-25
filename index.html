@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b12">
+  <meta name="description" content="A scientifically grounded, interactive map of the Solar System at any moment from 1900 to 2100.">
+  <title>Sol System — Interactive Orrery</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='8' fill='%23f6c96b'/%3E%3Cellipse cx='32' cy='32' rx='27' ry='12' fill='none' stroke='%237b91ad' stroke-width='2' transform='rotate(-28 32 32)'/%3E%3Ccircle cx='52' cy='22' r='3' fill='%236ca9cc'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+  <script>
+    // A last-resort visible error path for failures that happen before the
+    // application module has finished booting.
+    window.__fatalShown = false;
+    window.__showFatal = function (message, kind) {
+      window.__fatalShown = true;
+      var box = document.getElementById('fatal-error');
+      var loading = document.getElementById('loading');
+      if (loading) loading.hidden = true;
+      if (!box) return;
+
+      var isFile = location.protocol === 'file:' || kind === 'file';
+      var eyebrow = box.querySelector('[data-fatal-eyebrow]');
+      var title = box.querySelector('[data-fatal-title]');
+      var detail = box.querySelector('[data-fatal-detail]');
+      var open = box.querySelector('[data-fatal-open]');
+      if (eyebrow) eyebrow.textContent = isFile ? 'HTTP server required' : 'Unable to start';
+      if (title) title.textContent = isFile ? 'Open this app from its local server.' : 'The orrery could not start.';
+      if (detail) {
+        detail.textContent = isFile
+          ? 'The HTML file is loaded through file://, so the browser blocks its JavaScript modules. Start the included server, then open the local address.'
+          : (message || 'An unknown startup error occurred. Inspect the browser console for details.');
+      }
+      if (open) {
+        open.hidden = false;
+        open.href = isFile ? 'http://127.0.0.1:4173/' : location.href.split('#')[0];
+        open.textContent = isFile ? 'Open the local app' : 'Reload application URL';
+      }
+      box.hidden = false;
+    };
+    window.addEventListener('error', function (event) {
+      if (event && event.message && !window.__orreryReady && !window.__fatalShown) {
+        window.__showFatal(event.message);
+      }
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      var reason = event && event.reason;
+      if (!window.__orreryReady && !window.__fatalShown) {
+        window.__showFatal(reason && reason.message ? reason.message : String(reason || 'Unhandled rejection'));
+      }
+    });
+    setTimeout(function () {
+      if (!window.__orreryReady && !window.__fatalShown) {
+        window.__showFatal(
+          'The application did not finish loading at ' + location.href
+          + '. If this is a file-preview pane rather than the local server, open http://127.0.0.1:4173/ instead.',
+        );
+      }
+    }, 30000);
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#time-console">Skip to time controls</a>
+  <div id="app" class="app">
+    <div id="scene-root" class="scene-root" aria-hidden="true"></div>
+    <div class="scene-vignette" aria-hidden="true"></div>
+    <div class="scene-grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <span class="brand-sun"></span>
+          <span class="brand-orbit"></span>
+        </span>
+        <div class="brand-copy">
+          <p class="eyebrow">An interactive orrery</p>
+          <h1>Sol <span>System</span></h1>
+        </div>
+      </div>
+
+      <div class="clock" aria-label="Selected simulation time">
+        <div class="clock-kicker">
+          <span class="live-dot" id="playbackDot"></span>
+          <span id="clockKicker">Selected instant</span>
+          <span class="clock-zone" id="clockZoneLabel">Local</span>
+        </div>
+        <time id="clockTime" class="clock-time">--:--:--</time>
+        <div class="clock-meta">
+          <span id="clockDate">Loading date</span>
+          <span class="clock-divider" aria-hidden="true"></span>
+          <span id="clockUtc">UTC —</span>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="nowButton" class="button button-quiet" type="button" title="Return to the current time and real-time playback">
+          <span class="now-ring" aria-hidden="true"></span>
+          Now
+        </button>
+        <button id="aboutButton" class="button button-outline" type="button">
+          About / accuracy
+        </button>
+      </div>
+    </header>
+
+    <aside class="body-rail" aria-label="Solar System bodies">
+      <div class="rail-heading">
+        <span>Bodies</span>
+        <span class="rail-count">10</span>
+      </div>
+      <div id="body-list" class="body-list"></div>
+      <div class="rail-foot">
+        <span class="scale-key" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </span>
+        <span>Orbits to scale.<br>Disc sizes exaggerated ×12.</span>
+      </div>
+    </aside>
+
+    <div id="marker-layer" class="marker-layer" aria-label="Body markers"></div>
+
+    <aside id="inspector" class="inspector" aria-label="Selected body information">
+      <button id="inspectorToggle" class="inspector-toggle" type="button" aria-expanded="true" aria-controls="inspectorBody">
+        <span class="inspector-toggle-label">Details</span>
+        <span class="inspector-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="inspectorBody" class="inspector-body">
+        <div id="inspectorEmpty" class="inspector-empty" hidden>
+          <p class="eyebrow">No body selected</p>
+          <h2>Choose a world</h2>
+          <p>Select a body from the list, a marker in the scene, or focus one from its details card.</p>
+        </div>
+        <div id="inspectorContent">
+        <div class="inspector-head">
+          <span id="infoSwatch" class="info-swatch" aria-hidden="true"></span>
+          <div>
+            <p class="eyebrow" id="infoKicker">Selected body</p>
+            <h2 id="infoName">Earth</h2>
+            <p id="infoKind" class="info-kind">Terrestrial planet</p>
+          </div>
+        </div>
+
+        <p id="infoDescription" class="info-description"></p>
+
+        <div class="info-group">
+          <div class="info-group-head">
+            <span>Calculated</span>
+            <span class="info-badge info-badge-calc">At selected time</span>
+          </div>
+          <dl class="info-grid">
+            <div>
+              <dt>Distance from Sun</dt>
+              <dd><span id="infoDistance">—</span> <small>AU</small><span id="infoDistanceKm" class="unit-sub"></span></dd>
+            </div>
+            <div>
+              <dt>Ecliptic long. / lat.</dt>
+              <dd id="infoAngles">—</dd>
+            </div>
+            <div id="infoEarthDistanceRow" hidden>
+              <dt>Distance from Earth</dt>
+              <dd><span id="infoEarthDistance">—</span> <small>AU</small></dd>
+            </div>
+          </dl>
+          <p class="info-footnote">Geometric heliocentric position · J2000 ecliptic</p>
+        </div>
+
+        <div class="info-group">
+          <div class="info-group-head">
+            <span>Reference</span>
+            <span class="info-badge">Reference facts</span>
+          </div>
+          <dl class="info-grid info-grid-two">
+            <div>
+              <dt>Orbital period</dt>
+              <dd id="infoPeriod">—</dd>
+            </div>
+            <div>
+              <dt>Mean radius</dt>
+              <dd id="infoRadius">—</dd>
+            </div>
+          </dl>
+          <p id="infoCaveat" class="info-footnote" hidden></p>
+        </div>
+
+        <div class="inspector-actions">
+          <button id="focusSelected" class="button button-primary" type="button">
+            <span class="focus-icon" aria-hidden="true"></span>
+            <span id="focusSelectedLabel">Focus body</span>
+          </button>
+          <button id="clearSelection" class="button button-text" type="button">Clear</button>
+        </div>
+        </div>
+      </div>
+    </aside>
+
+    <nav class="view-tools" aria-label="View controls">
+      <div class="segmented view-presets" role="group" aria-label="Camera presets">
+        <button id="presetSystem" class="seg-button is-active" type="button" title="View the entire planetary system">Entire system</button>
+        <button id="presetInner" class="seg-button" type="button" title="View the inner planets">Inner planets</button>
+      </div>
+      <button id="resetView" class="button button-quiet reset-button" type="button">Reset view</button>
+      <div class="toggle-row" role="group" aria-label="Scene layers">
+        <button id="toggleOrbits" class="toggle is-on" type="button" aria-pressed="true">
+          <span class="toggle-led"></span>Orbits
+        </button>
+        <button id="toggleLabels" class="toggle is-on" type="button" aria-pressed="true">
+          <span class="toggle-led"></span>Labels
+        </button>
+        <button id="toggleGrid" class="toggle" type="button" aria-pressed="false">
+          <span class="toggle-led"></span>Grid
+        </button>
+      </div>
+    </nav>
+
+    <div class="scene-meta" aria-hidden="true">
+      <span class="meta-line"></span>
+      <span>Heliocentric · J2000 ecliptic · geometric</span>
+    </div>
+
+    <p class="scene-hint" id="sceneHint">Drag to orbit <span>·</span> Scroll to zoom <span>·</span> Right-drag to pan</p>
+
+    <footer id="time-console" class="time-console" aria-label="Time and playback controls">
+      <div class="console-top">
+        <div class="transport" role="group" aria-label="Playback">
+          <button id="reverseBtn" class="icon-button" type="button" title="Play backwards" aria-label="Play backwards">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6 4 12l7 6V6Z"/><path d="M20 6 13 12l7 6V6Z"/></svg>
+          </button>
+          <button id="playBtn" class="play-button" type="button" title="Pause" aria-label="Pause">
+            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7V5Z"/></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+          </button>
+          <button id="forwardBtn" class="icon-button" type="button" title="Play forwards" aria-label="Play forwards">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 7 6-7 6V6Z"/><path d="m13 6 7 6-7 6V6Z"/></svg>
+          </button>
+          <label class="speed-control">
+            <span class="speed-label">Rate</span>
+            <select id="speedSelect" aria-label="Simulation rate">
+              <option value="1">Real time</option>
+              <option value="60">1 min / sec</option>
+              <option value="3600">1 hour / sec</option>
+              <option value="86400">1 day / sec</option>
+              <option value="604800">1 week / sec</option>
+              <option value="2592000">30 days / sec</option>
+              <option value="31557600">1 year / sec</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="date-control">
+          <div class="date-control-head">
+            <label class="field-label" for="dateTimeInput">Jump to date &amp; time</label>
+            <div class="timezone-switch" role="group" aria-label="Date entry time zone">
+              <button id="timezoneLocal" class="tz-button is-active" type="button" aria-pressed="true">Local</button>
+              <button id="timezoneUtc" class="tz-button" type="button" aria-pressed="false">UTC</button>
+            </div>
+          </div>
+          <div class="date-input-wrap">
+            <input id="dateTimeInput" class="date-input" type="datetime-local" step="1" aria-describedby="timezoneLabel" />
+            <button id="nowInline" class="button button-small" type="button">Set to now</button>
+          </div>
+          <p id="timezoneLabel" class="timezone-label">Local time · <span id="timezoneName">—</span></p>
+        </div>
+
+        <div class="timeline-control">
+          <div class="timeline-head">
+            <span class="field-label">1900 — 2100 timeline</span>
+            <span id="sliderReadout" class="slider-readout">—</span>
+          </div>
+          <input id="timeSlider" class="timeline" type="range" min="0" max="73413.99998842593" step="0.0416666667" value="0" aria-label="Scrub through the supported date range" />
+          <div class="timeline-ticks" aria-hidden="true">
+            <span>1900</span><span>1950</span><span>2000</span><span>2050</span><span>2100</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="console-status">
+        <span><span class="status-mark" aria-hidden="true"></span><span id="playbackStatus">Live at real time</span></span>
+        <span class="status-range">Supported: 1900–2100 UTC</span>
+        <span class="status-model" id="deltaTStatus">ΔT applied for TT</span>
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      <div class="loading-inner">
+        <div class="loading-orbit" aria-hidden="true"><span></span></div>
+        <p class="loading-title">Charting the Solar System</p>
+        <p id="loadingStatus" class="loading-status">Loading ephemeris and renderer…</p>
+      </div>
+    </div>
+
+    <div id="fatal-error" class="fatal-error" hidden>
+      <div class="fatal-card">
+        <p class="eyebrow" data-fatal-eyebrow>Unable to start</p>
+        <h2 data-fatal-title>The orrery could not start.</h2>
+        <p data-fatal-detail>An unknown error occurred.</p>
+        <p class="fatal-help">This app needs WebGL and modern JavaScript. It must be served over HTTP, not opened as a file. Run <code>npm start</code> in the project folder, then open <code>http://127.0.0.1:4173/</code>.</p>
+        <div class="fatal-actions">
+          <a data-fatal-open class="button button-primary" href="http://127.0.0.1:4173/" target="_top">Open the local app</a>
+          <button class="button button-quiet" type="button" onclick="location.reload()">Try again</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="aboutDialog" class="about-dialog" aria-labelledby="aboutTitle">
+    <div class="about-sheet">
+      <div class="about-head">
+        <div>
+          <p class="eyebrow">Model notes</p>
+          <h2 id="aboutTitle">About this orrery</h2>
+        </div>
+        <button id="aboutClose" class="icon-button about-close" type="button" aria-label="Close model notes">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="about-content">
+        <section>
+          <h3>What you are seeing</h3>
+          <p>The scene is a geometric map of the Sun and planets at the selected instant—not a view from Earth. Positions are heliocentric and expressed in the <strong>J2000 mean ecliptic</strong> frame: +x toward the J2000 equinox, +y 90° eastward in the ecliptic plane, and +z toward ecliptic north. No light-time, aberration, atmospheric refraction, or observer location is applied.</p>
+          <p>Orbital distances use one consistent linear scale. The visible discs use a separate, uniform ×12 exaggeration so that planets do not vanish; the Sun is likewise enlarged. Labels and minimum-size markers are navigation aids, not physical sizes.</p>
+        </section>
+
+        <section>
+          <h3>Ephemeris &amp; time</h3>
+          <p>Planet and Moon vectors come from <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noreferrer">Astronomy Engine 2.1.19</a> by Don Cross (MIT). It is based on the <a href="https://en.wikipedia.org/wiki/VSOP_%28planets%29" target="_blank" rel="noreferrer">VSOP87</a> model, with the author reporting agreement within ±1 arcminute against NOVAS and testing against JPL Horizons. This explorer uses <code>HelioVector</code> and <code>GeoMoon</code>, rotates the J2000 equatorial vectors into the J2000 ecliptic with the library's <code>Rotation_EQJ_ECL</code> matrix, and fits no curves of its own.</p>
+          <p>Civil timestamps are handled in UTC. The browser's local time zone is used only for entry and display. Leap years follow the proleptic Gregorian calendar built into JavaScript's <code>Date</code>. Astronomy Engine converts UTC to Terrestrial Time (TT) internally using the Espenak–Meeus ΔT model; the bottom status line displays the applied ΔT in seconds. The app does not invent leap seconds. The app deliberately restricts input to <strong>1900-01-01 through 2100-12-31 UTC</strong>.</p>
+        </section>
+
+        <section>
+          <h3>Precision is not accuracy</h3>
+          <p>Numbers may be printed to many decimals, but that says nothing about physical accuracy. Position accuracy is limited by the ephemeris model, its epoch and truncation, ΔT uncertainty, and (for the Moon) short-term dynamics. “Precision” means repeatable numerical detail; “accuracy” means closeness to reality. Treat close-up planet views as visualizations, not navigation data.</p>
+          <p class="validation-note" id="validationNote">Independent check against JPL Horizons DE441 geometric vectors (J2000 ecliptic):
+            2025-01-01 — Earth 877 km (1.2″), Mars 1,634 km (1.4″), Neptune 338,282 km (15.6″);
+            2035-07-04 — Earth 1,175 km (1.6″), Mars 1,330 km (1.3″), Neptune 158,397 km (7.3″).
+            Full method and caveats are in the README.</p>
+        </section>
+
+        <section>
+          <h3>Orbit curves</h3>
+          <p>Each orbit path is sampled from the same ephemeris at hundreds of instants across one sidereal period, then drawn as a polyline. Curves therefore agree with the position model rather than coming from a separate circular orbit. A polyline is a visual approximation only in its segment density. Curves are refreshed as time moves so that secular changes are represented. Near 1900 or 2100 a curve may be sampled slightly outside the selectable interval so the loop still closes; body positions never are.</p>
+        </section>
+
+        <section>
+          <h3>What is illustrative</h3>
+          <p>Planet discs use generated, non-cartographic textures and approximate colours. They are not surface maps. Saturn's ring plane is oriented from Astronomy Engine's IAU rotation-axis model; the ring spacing, opacity, and texture are illustrative, and the spin phase is not modeled. Other axial tilts, rotation phases, surface features, clouds, and magnetic fields are <strong>not modeled</strong>. The star field is decorative and does not represent a sky catalogue. Sizes are exaggerated as described above.</p>
+        </section>
+
+        <section>
+          <h3>Known limitations</h3>
+          <ul>
+            <li>No moons other than Earth's Moon; no asteroids, comets, or Pluto.</li>
+            <li>The Moon's geocentric vector is modeled, but its orbit curve is drawn relative to Earth and is not a precisely closed ellipse.</li>
+            <li>VSOP87 is an approximation to the full JPL DE ephemerides. The small differences are visible in the README validation table.</li>
+            <li>Browser local-time input around a daylight-saving transition can be ambiguous. The UTC mode is unambiguous. In Local mode the exact UTC endpoints can also carry a local date just across midnight.</li>
+            <li>The camera and all assets are local; no live position service or API key is used.</li>
+          </ul>
+        </section>
+
+        <section class="about-sources">
+          <h3>Primary sources</h3>
+          <p>
+            <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noreferrer">Astronomy Engine source &amp; documentation</a> ·
+            <a href="https://ssd.jpl.nasa.gov/horizons/" target="_blank" rel="noreferrer">NASA/JPL Horizons</a> ·
+            <a href="https://ssd.jpl.nasa.gov/planets/phys_par.html" target="_blank" rel="noreferrer">JPL planetary physical parameters</a> ·
+            <a href="https://nssdc.gsfc.nasa.gov/planetary/factsheet/" target="_blank" rel="noreferrer">NASA planetary fact sheet</a>
+          </p>
+          <p class="about-colophon">Built with Three.js r186, Astronomy Engine 2.1.19, and locally hosted Manrope / IBM Plex Mono. Everything runs in the browser.</p>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <noscript>
+    <div class="noscript">This interactive orrery requires JavaScript and WebGL.</div>
+  </noscript>
+
+  <script type="module">
+    if (location.protocol === 'file:') {
+      window.__showFatal('', 'file');
+    } else {
+      import('./src/main.js').catch(function (error) {
+        console.error('Application module failed to load:', error);
+        window.__showFatal(
+          'Could not load the application module. Confirm that the local server is running at '
+          + location.origin + ' and that the vendor files are present. '
+          + (error && error.message ? error.message : String(error)),
+        );
+      });
+    }
+  </script>
+</body>
+</html>

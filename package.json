@@ -1,0 +1,21 @@
+{
+  "name": "sol-system-orrery",
+  "version": "1.0.0",
+  "description": "An interactive, ephemeris-driven solar system explorer.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node tests/astronomy.test.mjs",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "dependencies": {
+    "astronomy-engine": "2.1.19",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "playwright-core": "1.55.0"
+  }
+}
