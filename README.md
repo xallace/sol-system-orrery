@@ -6,6 +6,9 @@ heliocentric vectors in the **J2000 mean ecliptic** frame—not apparent
 positions seen from Earth. Distances are physically proportional; planet discs
 are deliberately enlarged for visibility and labelled as such.
 
+**Live site:** <https://xallace.github.io/sol-system-orrery/>  
+**Repository:** <https://github.com/xallace/sol-system-orrery>
+
 ![Desktop view of the orrery](docs/orrery-desktop.png)
 
 | Mobile layout | Mercury close-up | Saturn close-up |

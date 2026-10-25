@@ -2,6 +2,11 @@
   "name": "sol-system-orrery",
   "version": "1.0.0",
   "description": "An interactive, ephemeris-driven solar system explorer.",
+  "homepage": "https://xallace.github.io/sol-system-orrery/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xallace/sol-system-orrery.git"
+  },
   "private": true,
   "type": "module",
   "scripts": {
